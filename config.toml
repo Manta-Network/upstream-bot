@@ -1,0 +1,41 @@
+[paritytech.polkadot]
+organization = "paritytech"
+repository = "polkadot"
+query-release = true # Currently, we only track releases from polkadot.
+
+[paritytech.substrate]
+organization = "paritytech"
+repository = "substrate"
+query-release = false
+
+[paritytech.cumulus]
+organization = "paritytech"
+repository = "cumulus"
+query-release = false
+
+[paritytech.frontier]
+organization = "paritytech"
+repository = "frontier"
+query-release = false
+
+[PureStake.nimbus]
+organization = "PureStake"
+repository = "nimbus"
+query-release = false
+
+[open-web3-stack.orml]
+organization = "open-web3-stack"
+repository = "open-runtime-module-library"
+query-release = false
+
+# template
+# [organization.repository]
+# organization = "organization-name"
+# repository = "repository-name"
+# query-release = false
+
+[schedule]
+frequence = "2" # Query issues and PRs every 2 hours
+
+[discord]
+token = ""
