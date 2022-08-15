@@ -96,6 +96,6 @@ mod tests {
         let repos = get_repositories(&config).unwrap();
         assert_eq!(repos.len(), 6);
         assert_eq!(get_discord_token(&config), "123456789");
-        assert_eq!(get_update_frequence(&config), 2);
+        assert_eq!(get_update_frequence(&config), 7200);
     }
 }
