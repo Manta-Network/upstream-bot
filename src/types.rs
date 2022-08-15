@@ -22,7 +22,11 @@ use url::Url;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PullRequest {
     pub pr_number: u64,
+    pub title: Option<String>,
+    pub body: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub merged_at: Option<DateTime<Utc>>,
     pub status: Option<IssueState>,
     pub url: Option<Url>,
 }
@@ -31,7 +35,11 @@ impl From<pulls::PullRequest> for PullRequest {
     fn from(pr: pulls::PullRequest) -> Self {
         Self {
             pr_number: pr.number as u64,
+            title: pr.title,
+            body: pr.body,
             created_at: pr.created_at,
+            updated_at: pr.updated_at,
+            merged_at: pr.merged_at,
             status: pr.state,
             url: pr.html_url,
         }
@@ -41,7 +49,11 @@ impl From<pulls::PullRequest> for PullRequest {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Issue {
     pub issue_number: u32,
+    pub title: String,
+    pub body: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
     pub status: IssueState,
     pub url: Url,
 }
@@ -50,7 +62,11 @@ impl From<issues::Issue> for Issue {
     fn from(issue: issues::Issue) -> Self {
         Self {
             issue_number: issue.number as u32,
+            title: issue.title,
+            body: issue.body,
             created_at: issue.created_at,
+            updated_at: issue.updated_at,
+            closed_at: issue.closed_at,
             status: IssueState::Open,
             url: issue.html_url,
         }

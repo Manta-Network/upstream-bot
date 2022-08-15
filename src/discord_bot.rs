@@ -96,9 +96,16 @@ impl EventHandler for BotHandler {
 
 async fn handle_issue_message(repo: &str, issue: Option<&Issue>, msg: &Message, context: &Context) {
     if let Some(issue) = issue {
+        /*
+            The example of message format:
+            **Substrate Issue**: issue's title:
+            issue's url
+        */
         let response = MessageBuilder::new()
-            .push("New Issue From ")
             .push_bold_safe(repo)
+            .push(" **Issue**: ")
+            .push(&issue.title)
+            .push(" ")
             .push(issue.url.as_str())
             .build();
 
@@ -119,9 +126,16 @@ async fn handle_issue_message(repo: &str, issue: Option<&Issue>, msg: &Message, 
 
 async fn handle_pr_message(repo: &str, pr: Option<&PullRequest>, msg: &Message, context: &Context) {
     if let Some(pr) = pr {
+        /*
+            The example of message format:
+            **Substrate PR**: pr's title:
+            pr's url
+        */
         let response = MessageBuilder::new()
-            .push("New PR From ")
             .push_bold_safe(repo)
+            .push(" **PR**: ")
+            .push(pr.title.as_deref().unwrap_or("No title"))
+            .push(" ")
             .push(pr.url.as_ref().map(|u| u.as_str()).unwrap_or("No url"))
             .build();
 
@@ -162,5 +176,28 @@ pub async fn discord_bot(config: &Value) {
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_foramt() {
+        let repo = "Substrate";
+        let title = "Improve JSON error reporting";
+        let url = "https://github.com/XAMPPRocky/octocrab/issues/13";
+        let response = MessageBuilder::new()
+            .push_bold_safe(repo)
+            .push(" **PR**: ")
+            .push(title)
+            .push(" ")
+            .push(url)
+            .build();
+        assert_eq!(
+            response, 
+            "**Substrate** **PR**: Improve JSON error reporting https://github.com/XAMPPRocky/octocrab/issues/13"
+        );
     }
 }
