@@ -35,7 +35,7 @@ query-release = false
 # query-release = false
 
 [schedule]
-frequence = "2" # Query issues and PRs every 2 hours
+frequence = 2 # Query issues and PRs every 2 hours
 
 [discord]
-token = ""
+token = "123456789"

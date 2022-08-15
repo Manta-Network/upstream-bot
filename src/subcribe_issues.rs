@@ -14,13 +14,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::types::{DbKey, Issue};
 use anyhow::Result;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use octocrab::{models, params};
+use sled::Db;
+use std::sync::Arc;
 
-async fn get_new_issues(org: &str, repo: &str) -> Result<()> {
+// Get new issues.
+async fn get_new_issues(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<Issue>> {
     let octocrab = octocrab::instance();
-    // Returns the first page of all issues.
     let mut page = octocrab
         .issues(org, repo)
         .list()
@@ -29,18 +31,37 @@ async fn get_new_issues(org: &str, repo: &str) -> Result<()> {
         .send()
         .await?;
 
-    let mut a = 0u32;
+    let mut new_issues: Vec<Issue> = vec![];
     loop {
         for issue in &page {
-            println!(
-                "{}, {}, {}",
-                // issue.title, issue.html_url, issue.body, issue.created_at
-                issue.title,
-                issue.html_url,
-                issue.created_at
-            );
-            a += 1;
-            // break;
+            let _issue = Issue::from(issue.clone());
+            // seems there's a bug, some PRs will be returned.
+            // so need to filter PRs.
+            if issue.html_url.as_str().contains("pull") {
+                continue;
+            }
+
+            let key = DbKey {
+                repository: repo,
+                pr_number: None,
+                issue_number: Some(issue.number as u64),
+            };
+            let key_bytes = bincode::serialize(&key)?;
+            if db.contains_key(&key_bytes)? {
+                println!(
+                    "old issue will not be inserted to db: {}",
+                    _issue.issue_number
+                );
+            } else {
+                let val_bytes = bincode::serialize(&_issue)?;
+                db.insert(key_bytes, val_bytes)?;
+                println!(
+                    "new issue inserted: {:?}, url: {}",
+                    _issue.issue_number,
+                    _issue.url.as_str()
+                );
+                new_issues.push(_issue);
+            }
         }
         page = match octocrab
             .get_page::<models::issues::Issue>(&page.next)
@@ -50,9 +71,8 @@ async fn get_new_issues(org: &str, repo: &str) -> Result<()> {
             None => break,
         }
     }
-    dbg!(a);
 
-    Ok(())
+    Ok(new_issues)
 }
 
 #[cfg(test)]
@@ -60,9 +80,22 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn get_issues_should_work() {
+        let db = crate::utils::db_config().unwrap();
+        let db = Arc::new(db);
         let (org, repo) = ("open-web3-stack", "open-runtime-module-library");
-        get_new_issues(org, repo).await;
+        let _ = get_new_issues(db.clone(), org, repo).await;
         assert!(true);
+
+        let key = DbKey {
+            repository: "open-runtime-module-library",
+            pr_number: None,
+            issue_number: Some(118),
+        };
+        let bytes_key = bincode::serialize(&key).unwrap();
+        let val = db.get(&bytes_key).unwrap().unwrap();
+        let v: crate::types::Issue = bincode::deserialize(&val).unwrap();
+        dbg!(v);
     }
 }

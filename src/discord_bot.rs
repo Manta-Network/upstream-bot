@@ -13,3 +13,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
+
+use serenity::async_trait;
+use serenity::model::channel::Message;
+use serenity::model::gateway::Ready;
+use serenity::prelude::*;

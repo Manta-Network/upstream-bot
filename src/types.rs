@@ -14,24 +14,47 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
+use octocrab::models::{issues, pulls, IssueState};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PullRequest {
-    issue_number: u32,
-    created_at: NaiveDateTime,
-    status: Status,
-    url: Url,
+    pub pr_number: u64,
+    pub created_at: Option<DateTime<Utc>>,
+    pub status: Option<IssueState>,
+    pub url: Option<Url>,
+}
+
+impl From<pulls::PullRequest> for PullRequest {
+    fn from(pr: pulls::PullRequest) -> Self {
+        Self {
+            pr_number: pr.number as u64,
+            created_at: pr.created_at,
+            status: pr.state,
+            url: pr.html_url,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Issue {
-    issue_number: u32,
-    created_at: NaiveDateTime,
-    status: Status,
-    url: Url,
+    pub issue_number: u32,
+    pub created_at: DateTime<Utc>,
+    pub status: IssueState,
+    pub url: Url,
+}
+
+impl From<issues::Issue> for Issue {
+    fn from(issue: issues::Issue) -> Self {
+        Self {
+            issue_number: issue.number as u32,
+            created_at: issue.created_at,
+            status: IssueState::Open,
+            url: issue.html_url,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -40,4 +63,18 @@ pub enum Status {
     Open,
     Closed,
     Merged,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct DbKey<'a> {
+    pub repository: &'a str,
+    pub pr_number: Option<u64>,
+    pub issue_number: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Repository<'a> {
+    pub organization: &'a str,
+    pub repository: &'a str,
+    pub query_release: bool,
 }
