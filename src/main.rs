@@ -24,7 +24,9 @@ mod utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Hello, world!");
+    let config = utils::read_config()?;
+
+    discord_bot::discord_bot(&config).await;
 
     Ok(())
 }

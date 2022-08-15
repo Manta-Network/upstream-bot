@@ -21,7 +21,7 @@ use sled::Db;
 use std::sync::Arc;
 
 // Get new PRs.
-async fn get_new_pull_requests(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<PullRequest>> {
+pub async fn get_new_pull_requests(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<PullRequest>> {
     let octocrab = octocrab::instance();
     let mut page = octocrab
         .pulls(org, repo)

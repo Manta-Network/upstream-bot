@@ -73,8 +73,8 @@ pub struct DbKey<'a> {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct Repository<'a> {
-    pub organization: &'a str,
-    pub repository: &'a str,
+pub struct Repository {
+    pub organization: String,
+    pub repository: String,
     pub query_release: bool,
 }

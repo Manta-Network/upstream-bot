@@ -21,7 +21,7 @@ use sled::Db;
 use std::sync::Arc;
 
 // Get new issues.
-async fn get_new_issues(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<Issue>> {
+pub async fn get_new_issues(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<Issue>> {
     let octocrab = octocrab::instance();
     let mut page = octocrab
         .issues(org, repo)

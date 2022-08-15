@@ -40,7 +40,7 @@ pub fn read_config() -> Result<Value> {
     Ok(value)
 }
 
-pub fn get_repositories(config: &'_ Value) -> Result<Vec<Repository<'_>>> {
+pub fn get_repositories(config: &Value) -> Result<Vec<Repository>> {
     let mut repositories = vec![];
     for (k, _v) in config
         .as_table()
@@ -50,8 +50,8 @@ pub fn get_repositories(config: &'_ Value) -> Result<Vec<Repository<'_>>> {
         for (m, n) in config[k].as_table().as_ref().unwrap().into_iter() {
             if let Some(query_release) = n.get("query-release") {
                 let repo = Repository {
-                    organization: k,
-                    repository: m,
+                    organization: k.to_owned(),
+                    repository: m.to_owned(),
                     query_release: query_release
                         .as_bool()
                         .ok_or(IntenalError::TomlParseError)?,

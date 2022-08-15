@@ -14,7 +14,153 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::types::{Issue, PullRequest, Repository};
+use crate::utils::{get_discord_token, get_repositories, get_update_frequence};
+use crate::{subcribe_issues, subcribe_prs};
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use serenity::utils::MessageBuilder;
+use std::sync::Arc;
+use tokio::time::{sleep, Duration};
+use toml::Value;
+
+pub struct BotHandler {
+    frequence: Duration,
+    db: Arc<sled::Db>,
+    repositories: Vec<Repository>,
+}
+
+impl BotHandler {
+    pub fn new(secs: u64, db: sled::Db, repos: Vec<Repository>) -> Self {
+        Self {
+            frequence: Duration::from_secs(secs),
+            db: Arc::new(db),
+            repositories: repos,
+        }
+    }
+}
+
+#[async_trait]
+impl EventHandler for BotHandler {
+    async fn message(&self, context: Context, msg: Message) {
+        let _channel = match msg.channel_id.to_channel(&context).await {
+            Ok(channel) => channel,
+            Err(why) => {
+                println!("Error getting channel: {:?}", why);
+                return;
+            }
+        };
+
+        // When to query upstream changes.
+        sleep(self.frequence).await;
+
+        for repo in self.repositories.iter() {
+            // Query issues first.
+            if let Ok(new_issues) = subcribe_issues::get_new_issues(
+                self.db.clone(),
+                &repo.organization,
+                &repo.repository,
+            )
+            .await
+            {
+                for issue in new_issues.iter() {
+                    handle_issue_message(&repo.repository, Some(issue), &msg, &context).await;
+                }
+            } else {
+                handle_issue_message(&repo.repository, None, &msg, &context).await;
+            }
+
+            // Query PRs then.
+            if let Ok(new_prs) = subcribe_prs::get_new_pull_requests(
+                self.db.clone(),
+                &repo.organization,
+                &repo.repository,
+            )
+            .await
+            {
+                for pr in new_prs.iter() {
+                    handle_pr_message(&repo.repository, Some(pr), &msg, &context).await;
+                }
+            } else {
+                handle_pr_message(&repo.repository, None, &msg, &context).await;
+            }
+        }
+    }
+
+    async fn ready(&self, _: Context, ready: Ready) {
+        println!("{} is connected!", ready.user.name);
+    }
+}
+
+async fn handle_issue_message(repo: &str, issue: Option<&Issue>, msg: &Message, context: &Context) {
+    if let Some(issue) = issue {
+        let response = MessageBuilder::new()
+            .push("New Issue From ")
+            .push_bold_safe(repo)
+            .push(issue.url.as_str())
+            .build();
+
+        if let Err(why) = msg.channel_id.say(&context.http, &response).await {
+            println!("Error sending message: {:?}", why);
+        }
+    } else {
+        let response = MessageBuilder::new()
+            .push("Failed to query New Issue From ")
+            .push_bold_safe(repo)
+            .build();
+
+        if let Err(why) = msg.channel_id.say(&context.http, &response).await {
+            println!("Error sending message: {:?}", why);
+        }
+    }
+}
+
+async fn handle_pr_message(repo: &str, pr: Option<&PullRequest>, msg: &Message, context: &Context) {
+    if let Some(pr) = pr {
+        let response = MessageBuilder::new()
+            .push("New PR From ")
+            .push_bold_safe(repo)
+            .push(pr.url.as_ref().map(|u| u.as_str()).unwrap_or("No url"))
+            .build();
+
+        if let Err(why) = msg.channel_id.say(&context.http, &response).await {
+            println!("Error sending message: {:?}", why);
+        }
+    } else {
+        let response = MessageBuilder::new()
+            .push("Failed to query New Issue From ")
+            .push_bold_safe(repo)
+            .build();
+
+        if let Err(why) = msg.channel_id.say(&context.http, &response).await {
+            println!("Error sending message: {:?}", why);
+        }
+    }
+}
+
+pub async fn discord_bot(config: &Value) {
+    // Get discord bot token.
+    let token = get_discord_token(config);
+    // get db handler
+    let db = crate::utils::db_config().expect("Failed to create or open db.");
+    // Get the frequence of querying upstream.
+    let frequence = get_update_frequence(config) as u64;
+
+    // Get all repositories
+    let repositories = get_repositories(config).expect("Failed to get all repositories.");
+
+    // configure bot handler
+    let bot_handler = BotHandler::new(frequence, db, repositories);
+
+    let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
+    let mut client = Client::builder(&token, intents)
+        .event_handler(bot_handler)
+        .await
+        .expect("Err creating client");
+
+    if let Err(why) = client.start().await {
+        println!("Client error: {:?}", why);
+    }
+}
