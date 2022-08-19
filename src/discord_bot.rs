@@ -14,14 +14,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{Issue, PullRequest, Repository};
+use crate::types::{Issue, LatestRelease, PullRequest, Repository};
 use crate::utils::{get_discord_token, get_repositories, get_update_frequence};
-use crate::{subcribe_issues, subcribe_prs};
-use serenity::async_trait;
-use serenity::model::channel::Message;
-use serenity::model::gateway::Ready;
-use serenity::prelude::*;
-use serenity::utils::MessageBuilder;
+use crate::{subcribe_issues, subcribe_prs, subcribe_releases};
+use serenity::{
+    async_trait,
+    model::{channel::Message, gateway::Ready},
+    prelude::*,
+    utils::MessageBuilder,
+};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use toml::Value;
@@ -86,6 +87,17 @@ impl EventHandler for BotHandler {
             } else {
                 handle_pr_message(&repo.repository, None, &msg, &context).await;
             }
+
+            // Query latest release then.
+            if let Ok(latest_release) =
+                subcribe_releases::get_latest_release(&repo.organization, &repo.repository).await
+            {
+                let latest_release = LatestRelease::from(latest_release);
+                handle_release_message(&repo.repository, Some(&latest_release), &msg, &context)
+                    .await;
+            } else {
+                handle_release_message(&repo.repository, None, &msg, &context).await;
+            }
         }
     }
 
@@ -114,7 +126,7 @@ async fn handle_issue_message(repo: &str, issue: Option<&Issue>, msg: &Message, 
         }
     } else {
         let response = MessageBuilder::new()
-            .push("Failed to query New Issue From ")
+            .push("Failed to query new issue From ")
             .push_bold_safe(repo)
             .build();
 
@@ -144,7 +156,47 @@ async fn handle_pr_message(repo: &str, pr: Option<&PullRequest>, msg: &Message, 
         }
     } else {
         let response = MessageBuilder::new()
-            .push("Failed to query New Issue From ")
+            .push("Failed to query merged PRs From ")
+            .push_bold_safe(repo)
+            .build();
+
+        if let Err(why) = msg.channel_id.say(&context.http, &response).await {
+            println!("Error sending message: {:?}", why);
+        }
+    }
+}
+
+async fn handle_release_message(
+    repo: &str,
+    release: Option<&LatestRelease>,
+    msg: &Message,
+    context: &Context,
+) {
+    if let Some(release) = release {
+        /*
+            The example of message format:
+            **Polkadot Latest Release**: Release Title:
+            release's url
+        */
+        let response = MessageBuilder::new()
+            .push_bold_safe(repo)
+            .push(" **Latest Release**: ")
+            .push(
+                release
+                    .release_name
+                    .as_deref()
+                    .unwrap_or("No release title"),
+            )
+            .push(" ")
+            .push(release.url.as_str())
+            .build();
+
+        if let Err(why) = msg.channel_id.say(&context.http, &response).await {
+            println!("Error sending message: {:?}", why);
+        }
+    } else {
+        let response = MessageBuilder::new()
+            .push("Failed to query latest release from ")
             .push_bold_safe(repo)
             .build();
 
@@ -196,7 +248,7 @@ mod tests {
             .push(url)
             .build();
         assert_eq!(
-            response, 
+            response,
             "**Substrate** **PR**: Improve JSON error reporting https://github.com/XAMPPRocky/octocrab/issues/13"
         );
     }

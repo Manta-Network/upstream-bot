@@ -16,7 +16,7 @@
 
 use crate::types::{DbKey, PullRequest};
 use anyhow::Result;
-use octocrab::{models, params};
+use octocrab::{models, params, Octocrab};
 use sled::Db;
 use std::sync::Arc;
 
@@ -37,10 +37,13 @@ pub async fn get_new_pull_requests(db: Arc<Db>, org: &str, repo: &str) -> Result
             let new_pr = PullRequest::from(pr.clone());
             // seems there's a bug, some issues will be returned.
             // so need to filter issues.
-            if let Some(true) = pr
+            // And skipt the pr if it's not merged.
+            if pr
                 .html_url
                 .as_ref()
                 .map(|url| url.as_str().contains("issues"))
+                == Some(true)
+                || pr.merged_at.is_none()
             {
                 continue;
             }
@@ -76,6 +79,17 @@ pub async fn get_new_pull_requests(db: Arc<Db>, org: &str, repo: &str) -> Result
     Ok(new_prs)
 }
 
+pub async fn get_pr_by_id(
+    octo: &Octocrab,
+    id: u64,
+    org: &str,
+    repo: &str,
+) -> Result<models::pulls::PullRequest> {
+    let pr = octo.pulls(org, repo).get(id).await?;
+
+    Ok(pr)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,7 +101,6 @@ mod tests {
         let db = Arc::new(db);
         let (org, repo) = ("open-web3-stack", "open-runtime-module-library");
         let _ = get_new_pull_requests(db.clone(), org, repo).await;
-        assert!(true);
 
         let key = DbKey {
             repository: "open-runtime-module-library",

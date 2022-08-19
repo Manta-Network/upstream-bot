@@ -38,4 +38,8 @@ query-release = false
 frequence = 7200 # Query issues and PRs every 2(3600 * 2) hours
 
 [discord]
-token = "123456789"
+bot-token = "123456789"
+issue-channel = "" # where to send new issues
+merged-pr-channel = "" # where to send merge PRs
+new-pr-channel = "" # where to send new created PRs
+latest-release-channel = "" # where to send latest release

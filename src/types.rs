@@ -15,7 +15,7 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use chrono::{DateTime, Utc};
-use octocrab::models::{issues, pulls, IssueState};
+use octocrab::models::{issues, pulls, repos, IssueState};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -93,4 +93,21 @@ pub struct Repository {
     pub organization: String,
     pub repository: String,
     pub query_release: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LatestRelease {
+    pub release_name: Option<String>,
+    pub url: Url,
+    pub release_note: Option<String>,
+}
+
+impl From<repos::Release> for LatestRelease {
+    fn from(release: repos::Release) -> Self {
+        Self {
+            release_name: release.name,
+            url: release.html_url,
+            release_note: release.body,
+        }
+    }
 }

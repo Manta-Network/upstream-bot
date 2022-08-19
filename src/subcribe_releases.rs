@@ -14,20 +14,28 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::types::DbKey;
 use anyhow::Result;
+use octocrab::models::repos;
 
-mod discord_bot;
-mod subcribe_issues;
-mod subcribe_prs;
-mod subcribe_releases;
-mod types;
-mod utils;
+// Get latest release.
+pub async fn get_latest_release(org: &str, repo: &str) -> Result<repos::Release> {
+    let latest_release = octocrab::instance()
+        .repos(org, repo)
+        .releases()
+        .get_latest()
+        .await?;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let config = utils::read_config()?;
+    Ok(latest_release)
+}
 
-    discord_bot::discord_bot(&config).await;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    Ok(())
+    #[tokio::test]
+    async fn get_latest_release_should_work() {
+        let (org, repo) = ("paritytech", "polkadot");
+        assert!(get_latest_release(org, repo).await.is_ok());
+    }
 }

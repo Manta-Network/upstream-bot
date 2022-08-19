@@ -71,7 +71,7 @@ pub fn get_update_frequence(config: &Value) -> i64 {
 }
 
 pub fn get_discord_token(config: &Value) -> &str {
-    config["discord"]["token"]
+    config["discord"]["bot-token"]
         .as_str()
         .expect("Please give discord token here.")
 }

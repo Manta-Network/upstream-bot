@@ -16,7 +16,7 @@
 
 use crate::types::{DbKey, Issue};
 use anyhow::Result;
-use octocrab::{models, params};
+use octocrab::{models, params, Octocrab};
 use sled::Db;
 use std::sync::Arc;
 
@@ -75,6 +75,17 @@ pub async fn get_new_issues(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<Is
     Ok(new_issues)
 }
 
+pub async fn get_issue_by_id(
+    octo: &Octocrab,
+    id: u64,
+    org: &str,
+    repo: &str,
+) -> Result<models::issues::Issue> {
+    let issue = octo.issues(org, repo).get(id).await?;
+
+    Ok(issue)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,7 +97,6 @@ mod tests {
         let db = Arc::new(db);
         let (org, repo) = ("open-web3-stack", "open-runtime-module-library");
         let _ = get_new_issues(db.clone(), org, repo).await;
-        assert!(true);
 
         let key = DbKey {
             repository: "open-runtime-module-library",
