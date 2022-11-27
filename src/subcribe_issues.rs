@@ -14,15 +14,66 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{DbKey, Issue};
+//! Only query open issues
+
 use anyhow::Result;
-use octocrab::{models, params, Octocrab};
+use chrono::prelude::*;
+use octocrab::{models::issues, params, Octocrab};
 use sled::Db;
 use std::sync::Arc;
 
-// Get new issues.
-pub async fn get_new_issues(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<Issue>> {
-    let octocrab = octocrab::instance();
+pub async fn get_open_issues_by_date(
+    octocrab: Arc<Octocrab>,
+    org: &str,
+    repo: &str,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> Result<Vec<issues::Issue>> {
+    let mut page = octocrab
+        .issues(org, repo)
+        .list()
+        .state(params::State::Open)
+        .sort(params::issues::Sort::Created)
+        .direction(params::Direction::Descending)
+        .per_page(100)
+        .send()
+        .await?;
+
+    let mut all_issues = vec![];
+    'query_issue: loop {
+        for issue in &page {
+            // seems there's a bug, some PRs will be returned.
+            // so need to filter PRs.
+            if issue.html_url.as_str().contains("pull") {
+                continue;
+            }
+
+            if issue.created_at > to {
+                continue;
+            }
+            if issue.created_at >= from && issue.created_at <= to {
+                all_issues.push(issue.clone());
+            }
+            if issue.created_at < from {
+                break 'query_issue;
+            }
+        }
+
+        // go to next page of issues.
+        page = match octocrab.get_page::<issues::Issue>(&page.next).await? {
+            Some(next_page) => next_page,
+            None => break,
+        }
+    }
+
+    Ok(all_issues)
+}
+
+pub async fn get_all_open_issues(
+    octocrab: Arc<Octocrab>,
+    org: &str,
+    repo: &str,
+) -> Result<Vec<issues::Issue>> {
     let mut page = octocrab
         .issues(org, repo)
         .list()
@@ -31,48 +82,54 @@ pub async fn get_new_issues(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<Is
         .send()
         .await?;
 
-    let mut new_issues: Vec<Issue> = vec![];
+    let mut all_issues = vec![];
     loop {
         for issue in &page {
-            let _issue = Issue::from(issue.clone());
             // seems there's a bug, some PRs will be returned.
             // so need to filter PRs.
             if issue.html_url.as_str().contains("pull") {
                 continue;
             }
-
-            let key = DbKey {
-                repository: repo,
-                pr_number: None,
-                issue_number: Some(issue.number as u64),
-            };
-            let key_bytes = bincode::serialize(&key)?;
-            if db.contains_key(&key_bytes)? {
-                println!(
-                    "old issue will not be inserted to db: {}",
-                    _issue.issue_number
-                );
-            } else {
-                let val_bytes = bincode::serialize(&_issue)?;
-                db.insert(key_bytes, val_bytes)?;
-                println!(
-                    "new issue inserted: {:?}, url: {}",
-                    _issue.issue_number,
-                    _issue.url.as_str()
-                );
-                new_issues.push(_issue);
-            }
+            all_issues.push(issue.clone());
         }
-        page = match octocrab
-            .get_page::<models::issues::Issue>(&page.next)
-            .await?
-        {
+
+        // go to next page of issues.
+        page = match octocrab.get_page::<issues::Issue>(&page.next).await? {
             Some(next_page) => next_page,
             None => break,
         }
     }
 
-    Ok(new_issues)
+    Ok(all_issues)
+}
+
+// return closed issues
+pub async fn update_issue_status(db: Arc<Db>, org: &str, repo: &str) -> Result<Vec<issues::Issue>> {
+    let octocrab = octocrab::instance();
+
+    // pr has 2 status: open, closed
+    let open_issues = get_all_open_issues(octocrab, org, repo).await?;
+    // insert open issues
+    let key_prefix = format!("{org}#{repo}#issues#open");
+    crate::db::insert_batch_issues(db.clone(), &key_prefix, &open_issues).await?;
+
+    let existing_issues =
+        crate::db::get_all_archived_issues(db.clone(), key_prefix.as_bytes()).await?;
+
+    let mut closed_issues = vec![];
+    for old_issue in existing_issues {
+        // if old issue is not in current open issues, that means this issue has been closed.
+        if !open_issues.contains(&old_issue) {
+            // delete the issue if it has been closed.
+            let old_key_prefix = format!("{org}#{repo}#issues#open#{0}", old_issue.number);
+            let _ = db.remove(old_key_prefix.as_bytes())?;
+            let new_key_prefix = format!("{org}#{repo}#issues#closed");
+            crate::db::insert_one_issue(db.clone(), &new_key_prefix, &old_issue).await?;
+            closed_issues.push(old_issue);
+        }
+    }
+
+    Ok(closed_issues)
 }
 
 pub async fn get_issue_by_id(
@@ -80,9 +137,8 @@ pub async fn get_issue_by_id(
     id: u64,
     org: &str,
     repo: &str,
-) -> Result<models::issues::Issue> {
+) -> Result<issues::Issue> {
     let issue = octo.issues(org, repo).get(id).await?;
-
     Ok(issue)
 }
 
@@ -94,18 +150,5 @@ mod tests {
     #[ignore]
     async fn get_issues_should_work() {
         let db = crate::utils::db_config().unwrap();
-        let db = Arc::new(db);
-        let (org, repo) = ("open-web3-stack", "open-runtime-module-library");
-        let _ = get_new_issues(db.clone(), org, repo).await;
-
-        let key = DbKey {
-            repository: "open-runtime-module-library",
-            pr_number: None,
-            issue_number: Some(118),
-        };
-        let bytes_key = bincode::serialize(&key).unwrap();
-        let val = db.get(&bytes_key).unwrap().unwrap();
-        let v: crate::types::Issue = bincode::deserialize(&val).unwrap();
-        dbg!(v);
     }
 }

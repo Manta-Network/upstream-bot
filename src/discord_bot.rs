@@ -34,10 +34,10 @@ pub struct BotHandler {
 }
 
 impl BotHandler {
-    pub fn new(secs: u64, db: sled::Db, repos: Vec<Repository>) -> Self {
+    pub fn new(secs: u64, db: Arc<sled::Db>, repos: Vec<Repository>) -> Self {
         Self {
             frequence: Duration::from_secs(secs),
-            db: Arc::new(db),
+            db,
             repositories: repos,
         }
     }
@@ -89,7 +89,7 @@ impl EventHandler for BotHandler {
             }
 
             // Query latest release then.
-            if let Ok(latest_release) =
+            if let Some(latest_release) =
                 subcribe_releases::get_latest_release(&repo.organization, &repo.repository).await
             {
                 let latest_release = LatestRelease::from(latest_release);

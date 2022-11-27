@@ -14,11 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::Repository;
 use anyhow::Result;
+use chrono::naive::Days;
+use chrono::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{prelude::*, BufReader},
+    sync::Arc,
 };
 use thiserror::Error;
 use toml::Value;
@@ -27,6 +30,13 @@ use toml::Value;
 pub enum IntenalError {
     #[error("Failed to parse toml file.")]
     TomlParseError,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Repository {
+    pub organization: String,
+    pub repository: String,
+    pub query_release: bool,
 }
 
 // read project config file
@@ -77,18 +87,39 @@ pub fn get_discord_token(config: &Value) -> &str {
 }
 
 // configure sled db
-pub fn db_config() -> sled::Result<sled::Db> {
+pub fn db_config() -> sled::Result<Arc<sled::Db>> {
     sled::Config::default()
         // create a folder for store database file
         .path(concat!(env!("CARGO_MANIFEST_DIR"), "/db/"))
         .cache_capacity(1_000_000_000) // size of databse file, 1Gb
         .flush_every_ms(Some(1000))
         .open()
+        .map(Arc::new)
+}
+
+pub fn parse_from_date_and_to_date(from: &str, to: &str) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+    let to = format!("{to} 00:00:00");
+    let to = {
+        let _to = NaiveDateTime::parse_from_str(&to, "%Y-%m-%d %H:%M:%S")?;
+        let to = DateTime::from_utc(_to + Days::new(1), Utc); // if to = 2022-11-25, actually which means 2022-11-26 00:00:00
+        let now = Utc::now();
+        if to > now {
+            now
+        } else {
+            to
+        }
+    };
+
+    let from = format!("{from} 00:00:00");
+    let from = NaiveDateTime::parse_from_str(&from, "%Y-%m-%d %H:%M:%S")?;
+
+    Ok((DateTime::from_utc(from, Utc), to))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
 
     #[test]
     fn read_config_should_work() {
@@ -97,5 +128,33 @@ mod tests {
         assert_eq!(repos.len(), 6);
         assert_eq!(get_discord_token(&config), "123456789");
         assert_eq!(get_update_frequence(&config), 7200);
+    }
+
+    #[tokio::test]
+    async fn ensure_every_repository_is_valid() {
+        let config = read_config().unwrap();
+        let all_repos = get_repositories(&config).unwrap();
+
+        let octocrab = octocrab::instance();
+        for repo in all_repos {
+            assert!(octocrab
+                .repos(&repo.organization, &repo.repository)
+                .get()
+                .await
+                .is_ok());
+        }
+    }
+
+    #[test]
+    fn parse_date_should_work() {
+        let (from, to) = ("2022-11-24", "2022-11-25");
+
+        let _from = NaiveDateTime::parse_from_str(&format!("{from} 00:00:00"), "%Y-%m-%d %H:%M:%S")
+            .unwrap();
+        let _to =
+            NaiveDateTime::parse_from_str(&format!("{to} 00:00:00"), "%Y-%m-%d %H:%M:%S").unwrap();
+        let (from, to) = parse_from_date_and_to_date(from, to).unwrap();
+        assert_eq!(from, DateTime::<Utc>::from_utc(_from, Utc));
+        assert_eq!(to - DateTime::<Utc>::from_utc(_to, Utc), Duration::days(1));
     }
 }

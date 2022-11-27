@@ -14,19 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::DbKey;
-use anyhow::Result;
 use octocrab::models::repos;
 
 // Get latest release.
-pub async fn get_latest_release(org: &str, repo: &str) -> Result<repos::Release> {
+pub async fn get_latest_release(org: &str, repo: &str) -> Option<repos::Release> {
     let latest_release = octocrab::instance()
         .repos(org, repo)
         .releases()
         .get_latest()
-        .await?;
+        .await
+        .ok()?;
 
-    Ok(latest_release)
+    // if it's prerelease, return nothing.
+    (!latest_release.prerelease).then_some(latest_release)
 }
 
 #[cfg(test)]
@@ -36,6 +36,6 @@ mod tests {
     #[tokio::test]
     async fn get_latest_release_should_work() {
         let (org, repo) = ("paritytech", "polkadot");
-        assert!(get_latest_release(org, repo).await.is_ok());
+        assert!(get_latest_release(org, repo).await.is_some());
     }
 }

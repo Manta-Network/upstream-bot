@@ -1,7 +1,7 @@
 [paritytech.polkadot]
 organization = "paritytech"
 repository = "polkadot"
-query-release = true # Currently, we only track releases from polkadot.
+query-release = true # Currently, we only track release from polkadot.
 
 [paritytech.substrate]
 organization = "paritytech"
@@ -23,7 +23,7 @@ organization = "PureStake"
 repository = "nimbus"
 query-release = false
 
-[open-web3-stack.orml]
+[open-web3-stack.open-runtime-module-library]
 organization = "open-web3-stack"
 repository = "open-runtime-module-library"
 query-release = false

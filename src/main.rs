@@ -14,20 +14,35 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use anyhow::Result;
+#![allow(dead_code)]
 
-mod discord_bot;
+use anyhow::Result;
+use clap::Parser;
+
+mod cli;
+mod db;
+// mod discord_bot;
 mod subcribe_issues;
 mod subcribe_prs;
 mod subcribe_releases;
-mod types;
 mod utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let cli = cli::DiscordBotCli::parse();
     let config = utils::read_config()?;
 
-    discord_bot::discord_bot(&config).await;
+    match cli.get {
+        Some(cli::Commands::Issue(args)) => {
+            crate::cli::generate_issue_csv_report(&args).await?;
+        }
+        Some(cli::Commands::Pr(args)) => {
+            crate::cli::generate_pr_csv_report(&args).await?;
+        }
+        None => (),
+    }
+
+    // discord_bot::discord_bot(&config).await;
 
     Ok(())
 }
